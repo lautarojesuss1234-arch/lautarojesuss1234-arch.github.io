@@ -778,6 +778,17 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// ── DATE NORMALIZER ──
+function normalizeDate(str) {
+  if (!str) return '';
+  const s = String(str).trim();
+  const parts = s.split('/');
+  if (parts.length === 3) {
+    return parts[0].padStart(2,'0') + '/' + parts[1].padStart(2,'0') + '/' + parts[2];
+  }
+  return s;
+}
+
 // ── GEMINI API KEY ──
 const API_KEY_STORAGE = 'remitos_api_key';
 let API_KEY = localStorage.getItem(API_KEY_STORAGE) || '';
@@ -903,6 +914,7 @@ btnEscanear.addEventListener('click', async () => {
       const json = await procesarImagen(files[i]);
       const entry = { ...json, _id: Date.now() + i, _ts: new Date().toISOString() };
       entry.litros = parseFloat(String(entry.litros).replace(/[^\d.]/g, '')) || 0;
+      entry.fecha = normalizeDate(entry.fecha);
       registros.unshift(entry);
       guardados++;
       // Show last result in table
@@ -969,6 +981,7 @@ btnGuardar.addEventListener('click', () => {
   });
   const entry = { ...currentJson, _id: Date.now(), _ts: new Date().toISOString() };
   entry.litros = parseFloat(String(entry.litros).replace(/[^\d.]/g, '')) || 0;
+  entry.fecha = normalizeDate(entry.fecha);
   registros.unshift(entry);
   saveData();
   updateHeader();
@@ -1279,7 +1292,7 @@ function editRegistro(id) {
   overlay.querySelector('#saveEditBtn').addEventListener('click', () => {
     overlay.querySelectorAll('input[data-key]').forEach(input => {
       const key = input.dataset.key;
-      r[key] = key === 'litros' ? (parseFloat(input.value.replace(/[^\d.]/g,''))||0) : input.value;
+      r[key] = key === 'litros' ? (parseFloat(input.value.replace(/[^\d.]/g,''))||0) : key === 'fecha' ? normalizeDate(input.value) : input.value;
     });
     saveData();
     buildFilters();
@@ -1375,7 +1388,7 @@ function importExcel(input) {
       rows.forEach((row, i) => {
         const entry = {
           numero_remito: String(getVal(row, colMap.numero_remito)),
-          fecha:         excelDateToStr(getVal(row, colMap.fecha)),
+          fecha:         normalizeDate(excelDateToStr(getVal(row, colMap.fecha))),
           litros:        parseFloat(String(getVal(row, colMap.litros)).replace(/[^\d.]/g,'')) || 0,
           bodega_origen: String(getVal(row, colMap.bodega_origen)),
           bodega_destino:String(getVal(row, colMap.bodega_destino)),
