@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#0d0f14">
+<link rel="manifest" href="manifest.json">
+<title>RemitOS — Control de Despachos</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #151820;
+    --surface2: #1c2030;
+    --border: #252a3a;
+    --accent: #e8ff5a;
+    --accent2: #5af0c8;
+    --accent3: #ff6b6b;
+    --text: #eef0f8;
+    --text-muted: #6b7494;
+    --text-dim: #3a4060;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo span { color: var(--accent); }
+  .logo-dot {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--accent);
+  }
+  .header-meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+    line-height: 1.6;
+  }
+
+  /* ── NAV TABS ── */
+  .nav-tabs {
+    display: flex;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    padding: 14px 22px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.2s;
+    letter-spacing: 0.02em;
+  }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  /* ── PAGES ── */
+  .page { display: none; padding: 24px; max-width: 900px; margin: 0 auto; }
+  .page.active { display: block; }
+
+  /* ── SCANNER PAGE ── */
+  .scanner-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 20px;
+  }
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(232,255,90,0.03);
+  }
+  .upload-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .upload-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+    display: block;
+  }
+  .upload-text {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .upload-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .preview-img {
+    width: 100%;
+    max-height: 250px;
+    object-fit: contain;
+    border-radius: 8px;
+    margin-top: 16px;
+    display: none;
+    background: var(--bg);
+  }
+
+  .btn-primary {
+    width: 100%;
+    padding: 16px;
+    background: var(--accent);
+    color: #0d0f14;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-primary:hover { background: #f5ff80; transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* spinner */
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid rgba(13,15,20,0.3);
+    border-top-color: #0d0f14;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* result table */
+  .result-table {
+    width: 100%;
+    border-collapse: collapse;
+    display: none;
+  }
+  .result-table tr {
+    border-bottom: 1px solid var(--border);
+  }
+  .result-table td {
+    padding: 13px 0;
+    font-size: 14px;
+    vertical-align: top;
+  }
+  .result-table td:first-child {
+    width: 42%;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    padding-right: 16px;
+  }
+  .result-table td:last-child {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .field-highlight {
+    color: var(--accent) !important;
+    font-weight: 500;
+  }
+
+  .btn-save {
+    width: 100%;
+    padding: 14px;
+    background: transparent;
+    color: var(--accent2);
+    border: 1px solid var(--accent2);
+    border-radius: 10px;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 12px;
+    display: none;
+  }
+  .btn-save:hover { background: rgba(90,240,200,0.08); }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+< truncated lines 259-902 >
+  btnGuardar.style.display = 'none';
+  currentJson = null;
+});
+
+// ── DASHBOARD ──
+function renderDashboard() {
+  const total = registros.reduce((s, r) => s + (r.litros || 0), 0);
+  document.getElementById('kpiLitros').textContent = total > 0 ? total.toLocaleString('es-AR') : '—';
+  document.getElementById('kpiRemitos').textContent = registros.length;
+
+  const bodegas = new Set(registros.map(r => r.bodega_origen).filter(Boolean));
+  const choferes = new Set(registros.map(r => r.nombre_chofer).filter(Boolean));
+  document.getElementById('kpiBodegas').textContent = bodegas.size;
+  document.getElementById('kpiChoferes').textContent = choferes.size;
+
+  // Chart: litros por bodega origen
+  const bodegaMap = {};
+  registros.forEach(r => {
+    if (!r.bodega_origen) return;
+    bodegaMap[r.bodega_origen] = (bodegaMap[r.bodega_origen] || 0) + (r.litros || 0);
+  });
+  renderBarChart('chartBodega', bodegaMap, 6, var_accent());
+
+  // Chart: top choferes
+  const choferMap = {};
+  registros.forEach(r => {
+    if (!r.nombre_chofer) return;
+    choferMap[r.nombre_chofer] = (choferMap[r.nombre_chofer] || 0) + (r.litros || 0);
+  });
+  renderBarChart('chartChofer', choferMap, 6, '#5af0c8');
+
+  // Heatmap last 30 days
+  renderHeatmap();
+}
+
+function var_accent() { return '#e8ff5a'; }
+
+function renderBarChart(elId, dataMap, maxBars, color) {
+  const el = document.getElementById(elId);
+  const entries = Object.entries(dataMap).sort((a,b) => b[1]-a[1]).slice(0, maxBars);
+  if (!entries.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;margin:auto;">Sin datos aún</div>'; return; }
+  const max = Math.max(...entries.map(e => e[1]));
+  el.innerHTML = entries.map(([label, val]) => {
+    const pct = max ? Math.round((val / max) * 90) : 0;
+    const short = label.length > 10 ? label.slice(0,10) + '…' : label;
+    return `<div class="bar-wrap">
+      <div class="bar-val">${val.toLocaleString('es-AR')}</div>
+      <div class="bar" style="height:${pct}px;background:${color};" title="${label}: ${val}"></div>
+      <div class="bar-label">${short}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderHeatmap() {
+  const el = document.getElementById('heatmap');
+  const days = 30;
+  const today = new Date();
+  const countByDay = {};
+  registros.forEach(r => {
+    if (!r._ts) return;
+    const d = r._ts.slice(0, 10);
+    countByDay[d] = (countByDay[d] || 0) + 1;
+  });
+  let html = '';
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const cnt = countByDay[key] || 0;
+    const cls = cnt === 0 ? '' : cnt === 1 ? 'active-1' : cnt <= 3 ? 'active-2' : 'active-3';
+    const day = d.getDate();
+    html += `<div class="heatmap-day ${cls}" title="${key}: ${cnt} remitos">${day}</div>`;
+  }
+  el.innerHTML = html;
+}
+
+// ── RECORDS ──
+function buildFilters() {
+  const meses = new Set(), choferes = new Set(), origenes = new Set(), destinos = new Set();
+  registros.forEach(r => {
+    if (r._ts) meses.add(r._ts.slice(0, 7));
+    if (r.nombre_chofer) choferes.add(r.nombre_chofer);
+    if (r.bodega_origen)  origenes.add(r.bodega_origen);
+    if (r.bodega_destino) destinos.add(r.bodega_destino);
+  });
+
+  fillFilter('filterMes', [...meses].sort().reverse(), m => {
+    const [y, mo] = m.split('-');
+    return new Date(y, mo - 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+  });
+  fillFilter('filterChofer', [...choferes].sort());
+  fillFilter('filterOrigen',  [...origenes].sort());
+  fillFilter('filterDestino', [...destinos].sort());
+}
+
+function fillFilter(id, values, labelFn) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  values.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = labelFn ? labelFn(v) : v;
+    sel.appendChild(o);
+  });
+  // restore previous selection if still valid
+  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+
+function renderRecords() {
+  const mes     = document.getElementById('filterMes').value;
+  const chofer  = document.getElementById('filterChofer').value;
+  const origen  = document.getElementById('filterOrigen').value;
+  const destino = document.getElementById('filterDestino').value;
+
+  let filtered = registros.filter(r => {
+    if (mes     && !r._ts?.startsWith(mes))       return false;
+    if (chofer  && r.nombre_chofer !== chofer)     return false;
+    if (origen  && r.bodega_origen  !== origen)    return false;
+    if (destino && r.bodega_destino !== destino)   return false;
+    return true;
+  });
+
+  // ── Tramos summary (show when at least one bodega filter is active)
+  const tramosCard = document.getElementById('tramosCard');
+  if (origen || destino) {
+    renderTramos(filtered);
+    tramosCard.style.display = 'block';
+  } else {
+    tramosCard.style.display = 'none';
+  }
+
+  const tbody = document.getElementById('recordsTbody');
+  const empty = document.getElementById('emptyState');
+
+  // Totals bar
+  let totalsBar = document.getElementById('totalsBar');
+  if (!totalsBar) {
+    totalsBar = document.createElement('div');
+    totalsBar.id = 'totalsBar';
+    totalsBar.className = 'totals-bar';
+    document.querySelector('.records-table-wrap').after(totalsBar);
+  }
+
+  if (!filtered.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    totalsBar.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const totalLitros = filtered.reduce((s, r) => s + (r.litros || 0), 0);
+  totalsBar.style.display = 'flex';
+  totalsBar.innerHTML = `
+    <span>Viajes: <strong>${filtered.length}</strong></span>
+    <span>Total litros: <strong>${totalLitros.toLocaleString('es-AR')} L</strong></span>
+    ${origen  ? `<span>Desde: <strong>${origen}</strong></span>` : ''}
+    ${destino ? `<span>Hasta: <strong>${destino}</strong></span>` : ''}
+  `;
+
+  tbody.innerHTML = filtered.map((r) => `
+    <tr>
+      <td style="color:var(--text-muted)">${registros.length - registros.indexOf(r)}</td>
+      <td>${r.fecha || '—'}</td>
+      <td><span class="badge">${r.numero_remito || '—'}</span></td>
+      <td style="color:var(--accent)">${r.litros ? r.litros.toLocaleString('es-AR') + ' L' : '—'}</td>
+      <td>${r.bodega_origen || '—'}</td>
+      <td>${r.bodega_destino || '—'}</td>
+      <td>${r.nombre_chofer || '—'}</td>
+    </tr>`).join('');
+}
+
+function renderTramos(data) {
+  // Group by origen → destino
+  const tramoMap = {};
+  data.forEach(r => {
+    const key = `${r.bodega_origen || '?'}||${r.bodega_destino || '?'}`;
+    if (!tramoMap[key]) tramoMap[key] = { origen: r.bodega_origen, destino: r.bodega_destino, viajes: 0, litros: 0 };
+    tramoMap[key].viajes++;
+    tramoMap[key].litros += (r.litros || 0);
+  });
+
+  const entries = Object.values(tramoMap).sort((a, b) => b.litros - a.litros);
+  const el = document.getElementById('tramosGrid');
+
+  if (!entries.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Sin resultados para este tramo.</p>'; return; }
+
+  el.innerHTML = `<div class="tramos-grid">${entries.map(t => `
+    <div class="tramo-row">
+      <span class="tramo-origen">${t.origen || '—'}</span>
+      <span class="tramo-arrow">→</span>
+      <span class="tramo-destino">${t.destino || '—'}</span>
+      <div class="tramo-meta">
+        <div class="tramo-stat">
+          <span class="tramo-stat-val">${t.viajes}</span>
+          <span class="tramo-stat-lbl">viajes</span>
+        </div>
+        <div class="tramo-stat">
+          <span class="tramo-stat-val">${(t.litros/1000).toFixed(1)}k</span>
+          <span class="tramo-stat-lbl">litros</span>
+        </div>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+// ── CSV EXPORT ──
+function exportCSV() {
+  if (!registros.length) { showToast('No hay registros para exportar'); return; }
+  const headers = ['numero_remito','fecha','litros','bodega_origen','bodega_destino','nombre_chofer'];
+  const rows = [headers.join(',')];
+  registros.forEach(r => {
+    rows.push(headers.map(h => `"${(r[h] ?? '').toString().replace(/"/g,'""')}"`).join(','));
+  });
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `remitos_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  showToast('✓ CSV descargado');
+}
+
+// ── CLEAR ALL ──
+function clearAll() {
+  if (!confirm('¿Borrar todos los registros? No se puede deshacer.')) return;
+  registros = [];
+  saveData();
+  updateHeader();
+  renderRecords();
+  showToast('Registros eliminados');
+}
+
+// ── TOAST ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// Add some demo data if empty for visual check
+// (remove this block in production)
+if (registros.length === 0) {
+  const demo = [
+    { numero_remito:'00124', fecha:'12/05/2026', litros:4500, bodega_origen:'Bodega Luján', bodega_destino:'Bodega Mendoza', nombre_chofer:'García, Carlos', _id:1, _ts:'2026-05-12T08:00:00Z' },
+    { numero_remito:'00125', fecha:'14/05/2026', litros:3200, bodega_origen:'Bodega Luján', bodega_destino:'Bodega San Juan', nombre_chofer:'Pérez, Miguel', _id:2, _ts:'2026-05-14T09:30:00Z' },
+    { numero_remito:'00126', fecha:'16/05/2026', litros:6100, bodega_origen:'Bodega Maipú', bodega_destino:'Bodega Mendoza', nombre_chofer:'García, Carlos', _id:3, _ts:'2026-05-16T07:45:00Z' },
+    { numero_remito:'00127', fecha:'19/05/2026', litros:2800, bodega_origen:'Bodega Maipú', bodega_destino:'Bodega Luján', nombre_chofer:'Rodríguez, Ana', _id:4, _ts:'2026-05-19T10:00:00Z' },
+    { numero_remito:'00128', fecha:'21/05/2026', litros:5300, bodega_origen:'Bodega Luján', bodega_destino:'Bodega San Juan', nombre_chofer:'Pérez, Miguel', _id:5, _ts:'2026-05-21T08:15:00Z' },
+  ];
+  registros = demo;
+  saveData();
+  updateHeader();
+}
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+  }
+</script>
+</body>
+</html>
