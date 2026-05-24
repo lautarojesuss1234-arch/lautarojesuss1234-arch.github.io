@@ -1339,9 +1339,18 @@ function importExcel(input) {
         return '';
       }
 
-      function excelDateToStr(val) {
+      function excelDateToStr(val, isCsv) {
         if (!val) return '';
         const str = String(val).trim();
+
+        // If coming from our own CSV export, trust the format as-is (DD/MM/YYYY)
+        if (isCsv && str.includes('/')) {
+          const parts = str.split('/');
+          if (parts.length === 3 && parts[2].length === 4) {
+            return parts[0].padStart(2,'0')+'/'+parts[1].padStart(2,'0')+'/'+parts[2];
+          }
+          return str;
+        }
 
         // Excel serial number (e.g. 46156)
         const num = parseFloat(str);
@@ -1353,23 +1362,17 @@ function importExcel(input) {
           return day+'/'+mon+'/'+yr;
         }
 
-        // Format M/D/YYYY or MM/DD/YYYY (Excel US format) → DD/MM/YYYY
+        // Format M/D/YYYY from Excel (US locale) — only swap if first part <= 12 and second > 12
         if (str.includes('/')) {
           const parts = str.split('/');
-          if (parts.length === 3) {
-            let p0 = parts[0], p1 = parts[1], p2 = parts[2];
-            // If year is last and > 31 it's ambiguous — check if first part could be month
-            // Excel exports as M/D/YYYY in many locales
-            const yr = p2.length === 4 ? p2 : null;
-            if (yr) {
-              const a = parseInt(p0), b = parseInt(p1);
-              // If first part <= 12 and second > 12, it's M/D/YYYY → swap
-              if (a <= 12 && b > 12) {
-                return String(b).padStart(2,'0')+'/'+String(a).padStart(2,'0')+'/'+yr;
-              }
-              // Already DD/MM/YYYY or ambiguous — keep as is with zero padding
-              return String(a).padStart(2,'0')+'/'+String(b).padStart(2,'0')+'/'+yr;
+          if (parts.length === 3 && parts[2].length === 4) {
+            const a = parseInt(parts[0]), b = parseInt(parts[1]);
+            if (a <= 12 && b > 12) {
+              // Clearly M/D/YYYY — swap to DD/MM/YYYY
+              return String(b).padStart(2,'0')+'/'+String(a).padStart(2,'0')+'/'+parts[2];
             }
+            // Ambiguous or already DD/MM — keep as is with zero padding
+            return String(a).padStart(2,'0')+'/'+String(b).padStart(2,'0')+'/'+parts[2];
           }
         }
 
@@ -1384,11 +1387,12 @@ function importExcel(input) {
         return str;
       }
 
+      const isCsv = file.name.toLowerCase().endsWith('.csv');
       let importados = 0;
       rows.forEach((row, i) => {
         const entry = {
           numero_remito: String(getVal(row, colMap.numero_remito)),
-          fecha:         normalizeDate(excelDateToStr(getVal(row, colMap.fecha))),
+          fecha:         normalizeDate(excelDateToStr(getVal(row, colMap.fecha), isCsv)),
           litros:        parseFloat(String(getVal(row, colMap.litros)).replace(/[^\d.]/g,'')) || 0,
           bodega_origen: String(getVal(row, colMap.bodega_origen)),
           bodega_destino:String(getVal(row, colMap.bodega_destino)),
