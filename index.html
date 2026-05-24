@@ -722,6 +722,17 @@
     <select class="filter-select" id="filterChofer" onchange="renderRecords()">
       <option value="">Todos los chóferes</option>
     </select>
+    <select class="filter-select" id="filterOrden" onchange="renderRecords()">
+      <option value="desc">Mas reciente primero</option>
+      <option value="asc">Mas antiguo primero</option>
+    </select>
+  </div>
+  <div class="filters-row" style="align-items:center;">
+    <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;flex-shrink:0;">Desde</span>
+    <input type="date" class="filter-input" id="filterDesde" onchange="renderRecords()">
+    <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;flex-shrink:0;">Hasta</span>
+    <input type="date" class="filter-input" id="filterHasta" onchange="renderRecords()">
+    <button onclick="clearDateFilters()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:9px 12px;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0;">✕ Limpiar</button>
   </div>
   <div class="filters-row">
     <select class="filter-select" id="filterOrigen" onchange="renderRecords()">
@@ -1064,13 +1075,40 @@ function renderRecords() {
   const chofer  = document.getElementById('filterChofer').value;
   const origen  = document.getElementById('filterOrigen').value;
   const destino = document.getElementById('filterDestino').value;
+  const orden   = document.getElementById('filterOrden').value;
+  const desde   = document.getElementById('filterDesde').value;
+  const hasta   = document.getElementById('filterHasta').value;
+
+  // Parse DD/MM/AAAA to comparable date
+  function parsefecha(str) {
+    if (!str) return null;
+    const p = String(str).split('/');
+    if (p.length === 3) return new Date(p[2], p[1]-1, p[0]);
+    return new Date(str);
+  }
+
+  const desdeDate = desde ? new Date(desde) : null;
+  const hastaDate = hasta ? new Date(hasta + 'T23:59:59') : null;
 
   let filtered = registros.filter(r => {
     if (mes     && !r._ts?.startsWith(mes))       return false;
     if (chofer  && r.nombre_chofer !== chofer)     return false;
     if (origen  && r.bodega_origen  !== origen)    return false;
     if (destino && r.bodega_destino !== destino)   return false;
+    if (desdeDate || hastaDate) {
+      const fd = parsefecha(r.fecha);
+      if (!fd) return false;
+      if (desdeDate && fd < desdeDate) return false;
+      if (hastaDate && fd > hastaDate) return false;
+    }
     return true;
+  });
+
+  // Sort by fecha
+  filtered.sort((a, b) => {
+    const da = parsefecha(a.fecha), db = parsefecha(b.fecha);
+    if (!da || !db) return 0;
+    return orden === 'asc' ? da - db : db - da;
   });
 
   // ── Tramos summary (show when at least one bodega filter is active)
@@ -1172,6 +1210,13 @@ function exportCSV() {
   a.href = url; a.download = `remitos_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   showToast('✓ CSV descargado');
+}
+
+// ── CLEAR DATE FILTERS ──
+function clearDateFilters() {
+  document.getElementById('filterDesde').value = '';
+  document.getElementById('filterHasta').value = '';
+  renderRecords();
 }
 
 // ── DELETE ONE ──
