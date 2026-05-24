@@ -3,8 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<meta name="theme-color" content="#0d0f14">
-<link rel="manifest" href="manifest.json">
 <title>RemitOS — Control de Despachos</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <style>
@@ -258,7 +256,650 @@
     bottom: 24px;
     left: 50%;
     transform: translateX(-50%) translateY(80px);
-< truncated lines 259-902 >
+    background: var(--accent2);
+    color: #0d0f14;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 600;
+    z-index: 999;
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ── DASHBOARD ── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  @media(min-width:600px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: var(--accent);
+  }
+  .kpi-card.green::before { background: var(--accent2); }
+  .kpi-card.red::before { background: var(--accent3); }
+  .kpi-card.blue::before { background: #5a9af0; }
+
+  .kpi-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .kpi-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .kpi-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Bar chart */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .chart-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: var(--text);
+  }
+  .bar-chart { display: flex; align-items: flex-end; gap: 6px; height: 100px; }
+  .bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+  .bar {
+    width: 100%;
+    background: var(--accent);
+    border-radius: 4px 4px 0 0;
+    transition: height 0.6s cubic-bezier(0.34,1.56,0.64,1);
+    position: relative;
+    min-height: 3px;
+    opacity: 0.85;
+  }
+  .bar:hover { opacity: 1; }
+  .bar-label { font-size: 9px; color: var(--text-muted); font-family: 'DM Mono', monospace; }
+  .bar-val { font-size: 9px; color: var(--accent); font-family: 'DM Mono', monospace; }
+
+  /* ── REGISTROS PAGE ── */
+  .filters-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .filter-select, .filter-input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    flex: 1;
+    min-width: 120px;
+  }
+  .filter-select:focus, .filter-input:focus { border-color: var(--accent); }
+  .filter-select option { background: var(--surface2); }
+
+  .records-table-wrap { overflow-x: auto; }
+  .records-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .records-table th {
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .records-table td {
+    padding: 12px 12px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--text);
+  }
+  .records-table tr:hover td { background: var(--surface2); }
+  .badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 600;
+    background: rgba(232,255,90,0.12);
+    color: var(--accent);
+  }
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+  }
+  .empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; }
+
+  .btn-export {
+    padding: 10px 18px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .btn-export:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .btn-danger {
+    padding: 10px 18px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .btn-danger:hover { border-color: var(--accent3); color: var(--accent3); }
+
+  .top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* Responsive tweaks */
+  @media(max-width:480px) {
+    .page { padding: 16px; }
+    .scanner-card { padding: 20px; }
+    .kpi-value { font-size: 22px; }
+  }
+
+  /* Animated entry */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .page.active > * { animation: fadeUp 0.4s ease both; }
+  .page.active > *:nth-child(2) { animation-delay: 0.05s; }
+  .page.active > *:nth-child(3) { animation-delay: 0.10s; }
+
+  /* API key input */
+  .api-input-wrap {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .api-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    outline: none;
+  }
+  .api-input:focus { border-color: var(--accent); }
+  .api-save-btn {
+    padding: 10px 16px;
+    background: var(--accent);
+    color: #0d0f14;
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* Activity heatmap style chips */
+  .heatmap-row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .heatmap-day {
+    width: 28px; height: 28px;
+    border-radius: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px;
+    color: var(--text-muted);
+    position: relative;
+    cursor: default;
+    font-family: 'DM Mono', monospace;
+    transition: background 0.2s;
+  }
+  .heatmap-day.active-1 { background: rgba(232,255,90,0.15); border-color: rgba(232,255,90,0.3); color: var(--accent); }
+  .heatmap-day.active-2 { background: rgba(232,255,90,0.35); border-color: rgba(232,255,90,0.5); color: var(--bg); }
+  .heatmap-day.active-3 { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700; }
+
+  /* Tramos */
+  .tramos-grid { display: flex; flex-direction: column; gap: 8px; }
+  .tramo-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    transition: border-color 0.2s;
+  }
+  .tramo-row:hover { border-color: var(--accent2); }
+  .tramo-origen {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tramo-arrow {
+    font-size: 16px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .tramo-destino {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: right;
+  }
+  .tramo-meta {
+    display: flex;
+    gap: 10px;
+    margin-left: 10px;
+    flex-shrink: 0;
+  }
+  .tramo-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: var(--surface2);
+    border-radius: 6px;
+    padding: 4px 10px;
+    min-width: 52px;
+  }
+  .tramo-stat-val {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--accent2);
+    line-height: 1;
+  }
+  .tramo-stat-lbl {
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  /* totals bar */
+  .totals-bar {
+    display: flex;
+    gap: 16px;
+    padding: 14px 12px;
+    background: var(--surface2);
+    border-radius: 0 0 8px 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+  }
+  .totals-bar strong { color: var(--accent); font-family: 'Syne', sans-serif; }
+  .filters-row .arrow-sep {
+    display: flex; align-items: center;
+    color: var(--text-muted); font-size: 18px;
+    flex-shrink: 0; padding: 0 2px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    Remit<span>OS</span>
+  </div>
+  <div class="header-meta">
+    <div id="headerCount">0 registros</div>
+    <div id="headerDate"></div>
+  </div>
+</header>
+
+<nav class="nav-tabs">
+  <div class="tab active" onclick="goTab('scanner', this)">📷 Escanear</div>
+  <div class="tab" onclick="goTab('dashboard', this)">📊 Dashboard</div>
+  <div class="tab" onclick="goTab('records', this)">🗃 Registros</div>
+</nav>
+
+<!-- ══════════════ SCANNER ══════════════ -->
+<div class="page active" id="page-scanner">
+  <div class="scanner-card">
+    <div class="section-title">API Key de Gemini</div>
+    <div class="api-input-wrap">
+      <input class="api-input" id="apiKeyInput" type="password" placeholder="Pega tu API Key aquí...">
+      <button class="api-save-btn" onclick="saveApiKey()">Guardar</button>
+    </div>
+  </div>
+
+  <div class="scanner-card">
+    <div class="section-title">Cargar Remito</div>
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="inputImagen" accept="image/*" capture="environment">
+      <span class="upload-icon">📄</span>
+      <div class="upload-text">Tocá para fotografiar el remito</div>
+      <div class="upload-sub">JPG, PNG — cámara o galería</div>
+      <img class="preview-img" id="previewImg" alt="preview">
+    </div>
+    <button class="btn-primary" id="btnEscanear">
+      <div class="spinner" id="spinnerEl"></div>
+      <span id="btnText">✦ Extraer Datos</span>
+    </button>
+  </div>
+
+  <div class="scanner-card" id="resultCard" style="display:none">
+    <div class="section-title">Datos Extraídos</div>
+    <table class="result-table" id="resultTable">
+    </table>
+    <button class="btn-save" id="btnGuardar">＋ Guardar en Registros</button>
+  </div>
+</div>
+
+<!-- ══════════════ DASHBOARD ══════════════ -->
+<div class="page" id="page-dashboard">
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Total Litros</div>
+      <div class="kpi-value" id="kpiLitros">—</div>
+      <div class="kpi-sub">acumulado</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">Remitos</div>
+      <div class="kpi-value" id="kpiRemitos">0</div>
+      <div class="kpi-sub">registrados</div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">Bodegas</div>
+      <div class="kpi-value" id="kpiBodegas">0</div>
+      <div class="kpi-sub">distintas</div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">Chóferes</div>
+      <div class="kpi-value" id="kpiChoferes">0</div>
+      <div class="kpi-sub">activos</div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">Litros por Bodega Origen</div>
+    <div class="bar-chart" id="chartBodega">
+      <div style="color:var(--text-muted);font-size:12px;margin:auto;">Sin datos aún</div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">Actividad por día (último mes)</div>
+    <div class="heatmap-row" id="heatmap"></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">Top Chóferes por litros</div>
+    <div class="bar-chart" id="chartChofer">
+      <div style="color:var(--text-muted);font-size:12px;margin:auto;">Sin datos aún</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ REGISTROS ══════════════ -->
+<div class="page" id="page-records">
+  <div class="top-row">
+    <div class="section-title" style="margin:0;flex:1">Todos los Registros</div>
+    <button class="btn-export" onclick="exportCSV()">⬇ CSV</button>
+    <button class="btn-danger" onclick="clearAll()">🗑 Borrar todo</button>
+  </div>
+
+  <div class="filters-row">
+    <select class="filter-select" id="filterMes" onchange="renderRecords()">
+      <option value="">Todos los meses</option>
+    </select>
+    <select class="filter-select" id="filterChofer" onchange="renderRecords()">
+      <option value="">Todos los chóferes</option>
+    </select>
+  </div>
+  <div class="filters-row">
+    <select class="filter-select" id="filterOrigen" onchange="renderRecords()">
+      <option value="">Origen: todas</option>
+    </select>
+    <span style="display:flex;align-items:center;color:var(--text-muted);font-size:16px;flex-shrink:0">→</span>
+    <select class="filter-select" id="filterDestino" onchange="renderRecords()">
+      <option value="">Destino: todas</option>
+    </select>
+  </div>
+
+  <!-- Resumen de tramos -->
+  <div id="tramosCard" style="display:none;margin-bottom:16px;">
+    <div class="chart-card" style="padding:16px 20px;">
+      <div class="chart-title" style="margin-bottom:12px;">Tramos encontrados</div>
+      <div id="tramosGrid"></div>
+    </div>
+  </div>
+
+  <div class="records-table-wrap">
+    <table class="records-table" id="recordsTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Fecha</th>
+          <th>Remito</th>
+          <th>Litros</th>
+          <th>Origen</th>
+          <th>Destino</th>
+          <th>Chofer</th>
+        </tr>
+      </thead>
+      <tbody id="recordsTbody"></tbody>
+    </table>
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">📭</div>
+      <p>Todavía no hay registros.<br>Escaneá un remito para empezar.</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── GEMINI API KEY ──
+const API_KEY_STORAGE = 'remitos_api_key';
+let API_KEY = localStorage.getItem(API_KEY_STORAGE) || '';
+const apiKeyInput = document.getElementById('apiKeyInput');
+if (API_KEY) apiKeyInput.value = API_KEY;
+
+function saveApiKey() {
+  API_KEY = apiKeyInput.value.trim();
+  localStorage.setItem(API_KEY_STORAGE, API_KEY);
+  showToast('✓ API Key guardada');
+}
+
+// ── DATA STORE ──
+let registros = JSON.parse(localStorage.getItem('remitos_data') || '[]');
+function saveData() { localStorage.setItem('remitos_data', JSON.stringify(registros)); }
+
+// ── TABS ──
+function goTab(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  el.classList.add('active');
+  if (id === 'dashboard') renderDashboard();
+  if (id === 'records') { buildFilters(); renderRecords(); }
+}
+
+// ── HEADER ──
+function updateHeader() {
+  document.getElementById('headerCount').textContent = registros.length + ' registros';
+  document.getElementById('headerDate').textContent = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'short', year:'numeric' });
+}
+updateHeader();
+
+// ── UPLOAD ZONE ──
+const inputImagen = document.getElementById('inputImagen');
+const previewImg = document.getElementById('previewImg');
+const uploadZone = document.getElementById('uploadZone');
+
+inputImagen.addEventListener('change', () => {
+  const file = inputImagen.files[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  previewImg.src = url;
+  previewImg.style.display = 'block';
+});
+
+// ── SCAN ──
+let currentJson = null;
+const btnEscanear = document.getElementById('btnEscanear');
+const spinnerEl = document.getElementById('spinnerEl');
+const btnText = document.getElementById('btnText');
+const resultCard = document.getElementById('resultCard');
+const resultTable = document.getElementById('resultTable');
+const btnGuardar = document.getElementById('btnGuardar');
+
+const FIELD_LABELS = {
+  numero_remito:   'Número de Remito',
+  fecha:           'Fecha',
+  litros:          'Litros',
+  bodega_origen:   'Bodega Origen',
+  bodega_destino:  'Bodega Destino',
+  nombre_chofer:   'Nombre del Chofer'
+};
+
+btnEscanear.addEventListener('click', async () => {
+  if (!inputImagen.files[0]) { showToast('⚠ Primero seleccioná una imagen'); return; }
+  if (!API_KEY) { showToast('⚠ Guardá tu API Key primero'); return; }
+
+  btnEscanear.disabled = true;
+  spinnerEl.style.display = 'block';
+  btnText.textContent = 'Analizando...';
+  resultCard.style.display = 'none';
+  currentJson = null;
+
+  const archivo = inputImagen.files[0];
+  const reader = new FileReader();
+  reader.readAsDataURL(archivo);
+
+  reader.onload = async () => {
+    const base64Data = reader.result.split(',')[1];
+    const prompt = "Analiza este remito y devuelve estrictamente un JSON con las variables: numero_remito, fecha, litros, bodega_origen, bodega_destino y nombre_chofer (busca a la izquierda abajo aunque no tenga etiqueta). No devuelvas formato markdown, ni comillas invertidas, solo el texto del JSON puro.";
+
+    const bodyData = {
+      contents: [{ parts: [
+        { text: prompt },
+        { inlineData: { mimeType: "image/jpeg", data: base64Data } }
+      ]}]
+    };
+
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyData)
+      });
+      const data = await res.json();
+
+      if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        let raw = data.candidates[0].content.parts[0].text.trim();
+        // strip possible markdown fences
+        raw = raw.replace(/```json|```/g, '').trim();
+        currentJson = JSON.parse(raw);
+        renderResultTable(currentJson);
+        resultCard.style.display = 'block';
+        btnGuardar.style.display = 'block';
+      } else {
+        showToast('❌ No se pudo leer el remito');
+        console.error(data);
+      }
+    } catch(e) {
+      showToast('❌ Error: ' + e.message);
+    } finally {
+      btnEscanear.disabled = false;
+      spinnerEl.style.display = 'none';
+      btnText.textContent = '✦ Extraer Datos';
+    }
+  };
+});
+
+function renderResultTable(obj) {
+  resultTable.innerHTML = '';
+  for (const [key, label] of Object.entries(FIELD_LABELS)) {
+    const val = obj[key] ?? '—';
+    const tr = document.createElement('tr');
+    const isLitros = key === 'litros';
+    const isNum = key === 'numero_remito';
+    tr.innerHTML = `
+      <td>${label}</td>
+      <td class="${isLitros || isNum ? 'field-highlight' : ''}">${val}</td>`;
+    resultTable.appendChild(tr);
+  }
+  resultTable.style.display = 'table';
+}
+
+// ── SAVE ──
+btnGuardar.addEventListener('click', () => {
+  if (!currentJson) return;
+  const entry = { ...currentJson, _id: Date.now(), _ts: new Date().toISOString() };
+  // normalize litros to number
+  entry.litros = parseFloat(String(entry.litros).replace(/[^\d.]/g, '')) || 0;
+  registros.unshift(entry);
+  saveData();
+  updateHeader();
+  showToast('✓ Guardado correctamente');
   btnGuardar.style.display = 'none';
   currentJson = null;
 });
@@ -504,21 +1145,17 @@ function showToast(msg) {
 // (remove this block in production)
 if (registros.length === 0) {
   const demo = [
-    { numero_remito:'00124', fecha:'12/05/2026', litros:4500, bodega_origen:'Bodega Luján', bodega_destino:'Bodega Mendoza', nombre_chofer:'García, Carlos', _id:1, _ts:'2026-05-12T08:00:00Z' },
-    { numero_remito:'00125', fecha:'14/05/2026', litros:3200, bodega_origen:'Bodega Luján', bodega_destino:'Bodega San Juan', nombre_chofer:'Pérez, Miguel', _id:2, _ts:'2026-05-14T09:30:00Z' },
-    { numero_remito:'00126', fecha:'16/05/2026', litros:6100, bodega_origen:'Bodega Maipú', bodega_destino:'Bodega Mendoza', nombre_chofer:'García, Carlos', _id:3, _ts:'2026-05-16T07:45:00Z' },
-    { numero_remito:'00127', fecha:'19/05/2026', litros:2800, bodega_origen:'Bodega Maipú', bodega_destino:'Bodega Luján', nombre_chofer:'Rodríguez, Ana', _id:4, _ts:'2026-05-19T10:00:00Z' },
-    { numero_remito:'00128', fecha:'21/05/2026', litros:5300, bodega_origen:'Bodega Luján', bodega_destino:'Bodega San Juan', nombre_chofer:'Pérez, Miguel', _id:5, _ts:'2026-05-21T08:15:00Z' },
+    { numero_remito:'00124', fecha:'12/05/2026', litros:4500, bodega_origen:'Bodega Lujan', bodega_destino:'Bodega Mendoza', nombre_chofer:'Garcia, Carlos', _id:1, _ts:'2026-05-12T08:00:00Z' },
+    { numero_remito:'00125', fecha:'14/05/2026', litros:3200, bodega_origen:'Bodega Lujan', bodega_destino:'Bodega San Juan', nombre_chofer:'Perez, Miguel', _id:2, _ts:'2026-05-14T09:30:00Z' },
+    { numero_remito:'00126', fecha:'16/05/2026', litros:6100, bodega_origen:'Bodega Maipu', bodega_destino:'Bodega Mendoza', nombre_chofer:'Garcia, Carlos', _id:3, _ts:'2026-05-16T07:45:00Z' },
+    { numero_remito:'00127', fecha:'19/05/2026', litros:2800, bodega_origen:'Bodega Maipu', bodega_destino:'Bodega Lujan', nombre_chofer:'Rodriguez, Ana', _id:4, _ts:'2026-05-19T10:00:00Z' },
+    { numero_remito:'00128', fecha:'21/05/2026', litros:5300, bodega_origen:'Bodega Lujan', bodega_destino:'Bodega San Juan', nombre_chofer:'Perez, Miguel', _id:5, _ts:'2026-05-21T08:15:00Z' },
   ];
   registros = demo;
   saveData();
   updateHeader();
 }
 </script>
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js');
-  }
-</script>
 </body>
 </html>
+ 
