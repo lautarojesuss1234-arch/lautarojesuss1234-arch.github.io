@@ -939,23 +939,35 @@ btnEscanear.addEventListener('click', async () => {
 function renderResultTable(obj) {
   resultTable.innerHTML = '';
   for (const [key, label] of Object.entries(FIELD_LABELS)) {
-    const val = obj[key] ?? '—';
+    const val = obj[key] ?? '';
     const tr = document.createElement('tr');
     const isLitros = key === 'litros';
     const isNum = key === 'numero_remito';
     tr.innerHTML = `
       <td>${label}</td>
-      <td class="${isLitros || isNum ? 'field-highlight' : ''}">${val}</td>`;
+      <td><input 
+        data-key="${key}"
+        value="${String(val).replace(/"/g,'&quot;')}"
+        style="background:transparent;border:none;border-bottom:1px solid var(--border);color:${isLitros||isNum?'var(--accent)':'var(--text)'};font-family:'DM Mono',monospace;font-size:13px;width:100%;outline:none;padding:2px 0;"
+        oninput="updateCurrentJson('${key}', this.value)"
+      ></td>`;
     resultTable.appendChild(tr);
   }
   resultTable.style.display = 'table';
 }
 
+function updateCurrentJson(key, value) {
+  if (currentJson) currentJson[key] = value;
+}
+
 // ── SAVE ──
 btnGuardar.addEventListener('click', () => {
   if (!currentJson) return;
+  // Read values from editable inputs in case user changed them
+  resultTable.querySelectorAll('input[data-key]').forEach(input => {
+    currentJson[input.dataset.key] = input.value;
+  });
   const entry = { ...currentJson, _id: Date.now(), _ts: new Date().toISOString() };
-  // normalize litros to number
   entry.litros = parseFloat(String(entry.litros).replace(/[^\d.]/g, '')) || 0;
   registros.unshift(entry);
   saveData();
@@ -1158,7 +1170,10 @@ function renderRecords() {
       <td>${r.bodega_origen || '—'}</td>
       <td>${r.bodega_destino || '—'}</td>
       <td>${r.nombre_chofer || '—'}</td>
-      <td><button onclick="deleteRegistro(${r._id})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:4px 6px;" title="Borrar">🗑</button></td>
+      <td style="white-space:nowrap;">
+        <button onclick="editRegistro(${r._id})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:4px 6px;" title="Editar">✏️</button>
+        <button onclick="deleteRegistro(${r._id})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:4px 6px;" title="Borrar">🗑</button>
+      </td>
     </tr>`).join('');
 }
 
@@ -1217,6 +1232,61 @@ function clearDateFilters() {
   document.getElementById('filterDesde').value = '';
   document.getElementById('filterHasta').value = '';
   renderRecords();
+}
+
+// ── EDIT REGISTRO ──
+function editRegistro(id) {
+  const r = registros.find(x => x._id === id);
+  if (!r) return;
+
+  // Build modal
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;';
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;width:100%;max-width:400px;max-height:85vh;overflow-y:auto;';
+
+  const fields = Object.entries(FIELD_LABELS);
+  let inputs = fields.map(([key, label]) => `
+    <div style="margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;letter-spacing:0.05em;">${label}</div>
+      <input data-key="${key}" value="${String(r[key]??'').replace(/"/g,'&quot;')}"
+        style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:13px;outline:none;box-sizing:border-box;">
+    </div>`).join('');
+
+  modal.innerHTML = `
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;margin-bottom:20px;">Editar Registro</div>
+    ${inputs}
+    <div style="display:flex;gap:10px;margin-top:8px;">
+      <button onclick="this.closest('.edit-overlay').remove()" 
+        style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;font-size:14px;cursor:pointer;">
+        Cancelar
+      </button>
+      <button id="saveEditBtn"
+        style="flex:1;padding:12px;background:var(--accent);border:none;color:#0d0f14;border-radius:8px;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;cursor:pointer;">
+        Guardar
+      </button>
+    </div>`;
+
+  overlay.className = 'edit-overlay';
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  // Close on overlay click
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  // Save changes
+  overlay.querySelector('#saveEditBtn').addEventListener('click', () => {
+    overlay.querySelectorAll('input[data-key]').forEach(input => {
+      const key = input.dataset.key;
+      r[key] = key === 'litros' ? (parseFloat(input.value.replace(/[^\d.]/g,''))||0) : input.value;
+    });
+    saveData();
+    buildFilters();
+    renderRecords();
+    overlay.remove();
+    showToast('✓ Registro actualizado');
+  });
 }
 
 // ── DELETE ONE ──
