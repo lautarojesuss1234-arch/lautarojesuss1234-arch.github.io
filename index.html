@@ -600,6 +600,8 @@
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
 
@@ -710,8 +712,10 @@
 <div class="page" id="page-records">
   <div class="top-row">
     <div class="section-title" style="margin:0;flex:1">Todos los Registros</div>
-    <button class="btn-export" onclick="exportCSV()">⬇ CSV</button>
-    <label class="btn-export" style="cursor:pointer;">📊 Excel<input type="file" id="inputExcel" accept=".xlsx,.xls,.csv" style="display:none" onchange="importExcel(this)"></label>
+    <button class="btn-export" onclick="exportExcel()">⬇ Excel</button>
+    <button class="btn-export" onclick="exportPDF()">⬇ PDF</button>
+    <label class="btn-export" style="cursor:pointer;">📊 Importar Excel<input type="file" id="inputExcel" accept=".xlsx,.xls" style="display:none" onchange="importExcel(this)"></label>
+    <label class="btn-export" style="cursor:pointer;">📄 Importar PDF<input type="file" id="inputPDF" accept=".pdf" style="display:none" onchange="importPDF(this)"></label>
     <button class="btn-danger" onclick="clearAll()">🗑 Borrar todo</button>
   </div>
 
@@ -1225,27 +1229,121 @@ function renderTramos(data) {
 }
 
 // ── CSV EXPORT ──
-function exportCSV() {
+// ── EXPORT EXCEL ──
+function exportExcel() {
   if (!registros.length) { showToast('No hay registros para exportar'); return; }
   const headers = ['numero_remito','fecha','litros','bodega_origen','bodega_destino','nombre_chofer'];
-  const rows = [headers.join(',')];
-  registros.forEach(r => {
-    rows.push(headers.map(h => {
-      let val = (r[h] ?? '').toString();
-      // Normalize fecha to DD/MM/YYYY with zeros
-      if (h === 'fecha' && val.includes('/')) {
-        const p = val.split('/');
-        if (p.length === 3) val = p[0].padStart(2,'0')+'/'+p[1].padStart(2,'0')+'/'+p[2];
-      }
-      return '"'+val.replace(/"/g,'""')+'"';
-    }).join(','));
+  const labels  = ['Remito','Fecha','Litros','Origen','Destino','Chofer'];
+  const rows = registros.map(r => headers.map(h => {
+    let val = r[h] ?? '';
+    if (h === 'fecha') val = normalizeDate(String(val));
+    return val;
+  }));
+  const ws = XLSX.utils.aoa_to_sheet([labels, ...rows]);
+  // Set column widths
+  ws['!cols'] = [12,14,10,20,20,20].map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Registros');
+  XLSX.writeFile(wb, `remitos_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast('✓ Excel descargado');
+}
+
+// ── EXPORT PDF ──
+function exportPDF() {
+  if (!registros.length) { showToast('No hay registros para exportar'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape' });
+
+  // Title
+  doc.setFontSize(16);
+  doc.setFont('helvetica','bold');
+  doc.text('RemitOS — Registros de Despacho', 14, 16);
+  doc.setFontSize(9);
+  doc.setFont('helvetica','normal');
+  doc.text('Exportado: ' + new Date().toLocaleDateString('es-AR'), 14, 22);
+  doc.text('Total registros: ' + registros.length, 14, 27);
+  const totalLitros = registros.reduce((s,r) => s+(r.litros||0), 0);
+  doc.text('Total litros: ' + totalLitros.toLocaleString('es-AR'), 14, 32);
+
+  // Table
+  const headers = ['Remito','Fecha','Litros','Origen','Destino','Chofer'];
+  const rows = registros.map(r => [
+    r.numero_remito || '',
+    normalizeDate(String(r.fecha || '')),
+    (r.litros || 0).toLocaleString('es-AR'),
+    r.bodega_origen || '',
+    r.bodega_destino || '',
+    r.nombre_chofer || ''
+  ]);
+
+  doc.autoTable({
+    head: [headers],
+    body: rows,
+    startY: 36,
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [30, 32, 48], textColor: [232, 255, 90], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [245, 245, 250] },
+    margin: { left: 14, right: 14 }
   });
-  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `remitos_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-  showToast('✓ CSV descargado');
+
+  // Embed data as invisible text for reimport
+  const jsonData = JSON.stringify(registros.map(r => ({
+    numero_remito: r.numero_remito,
+    fecha: normalizeDate(String(r.fecha||'')),
+    litros: r.litros,
+    bodega_origen: r.bodega_origen,
+    bodega_destino: r.bodega_destino,
+    nombre_chofer: r.nombre_chofer
+  })));
+  doc.setFontSize(1);
+  doc.setTextColor(255,255,255);
+  doc.text('##REMITOS_DATA##' + jsonData + '##END##', 14, doc.internal.pageSize.height - 2);
+
+  doc.save(`remitos_${new Date().toISOString().slice(0,10)}.pdf`);
+  showToast('✓ PDF descargado');
+}
+
+// ── IMPORT PDF ──
+function importPDF(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      // Read PDF as text using basic extraction
+      const text = await extractPDFText(e.target.result);
+      const match = text.match(/##REMITOS_DATA##([\s\S]*?)##END##/);
+      if (!match) { showToast('❌ PDF no compatible — usá uno exportado desde RemitOS'); input.value=''; return; }
+      const data = JSON.parse(match[1]);
+      let importados = 0;
+      data.forEach((r, i) => {
+        registros.unshift({
+          ...r,
+          litros: parseFloat(String(r.litros).replace(/[^\d.]/g,'')) || 0,
+          _id: Date.now() + i,
+          _ts: new Date().toISOString()
+        });
+        importados++;
+      });
+      saveData(); updateHeader(); buildFilters(); renderRecords();
+      showToast('✓ ' + importados + ' registros importados desde PDF');
+    } catch(err) {
+      showToast('❌ Error al leer el PDF');
+      console.error(err);
+    }
+    input.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function extractPDFText(arrayBuffer) {
+  // Simple PDF text extraction — look for our data marker
+  const bytes = new Uint8Array(arrayBuffer);
+  let text = '';
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] >= 32 && bytes[i] < 127) text += String.fromCharCode(bytes[i]);
+  }
+  return text;
 }
 
 // ── CLEAR DATE FILTERS ──
@@ -1351,11 +1449,11 @@ function importExcel(input) {
         if (!val) return '';
         const str = String(val).trim();
 
-        // If coming from our own CSV export, trust the format as-is (DD/MM/YYYY)
-        if (isCsv && str.includes('/')) {
-          const parts = str.split('/');
-          if (parts.length === 3 && parts[2].length === 4) {
-            return parts[0].padStart(2,'0')+'/'+parts[1].padStart(2,'0')+'/'+parts[2];
+        // CSV from our app: just pad zeros, never swap
+        if (isCsv) {
+          if (str.includes('/')) {
+            const p = str.split('/');
+            if (p.length === 3) return p[0].padStart(2,'0')+'/'+p[1].padStart(2,'0')+'/'+p[2];
           }
           return str;
         }
