@@ -856,7 +856,7 @@ async function procesarImagen(archivo) {
     reader.readAsDataURL(archivo);
     reader.onload = async () => {
       const base64Data = reader.result.split(',')[1];
-      const prompt = "Analiza este remito y devuelve estrictamente un JSON con las variables: numero_remito, fecha, litros, bodega_origen, bodega_destino y nombre_chofer (busca a la izquierda abajo aunque no tenga etiqueta). No devuelvas formato markdown, ni comillas invertidas, solo el texto del JSON puro.";
+      const prompt = "Analiza este remito y devuelve estrictamente un JSON con las variables: numero_remito, fecha, litros, bodega_origen, bodega_destino y nombre_chofer (busca a la izquierda abajo aunque no tenga etiqueta). La fecha SIEMPRE en formato DD/MM/AAAA con barras, por ejemplo 23/05/2026. No devuelvas formato markdown, ni comillas invertidas, solo el texto del JSON puro.";
       const bodyData = { contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: base64Data } }] }] };
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
