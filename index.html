@@ -599,6 +599,7 @@
     flex-shrink: 0; padding: 0 2px;
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -632,10 +633,10 @@
   <div class="scanner-card">
     <div class="section-title">Cargar Remito</div>
     <div class="upload-zone" id="uploadZone">
-      <input type="file" id="inputImagen" accept="image/*" capture="environment">
+      <input type="file" id="inputImagen" accept="image/*" multiple>
       <span class="upload-icon">📄</span>
-      <div class="upload-text">Tocá para fotografiar el remito</div>
-      <div class="upload-sub">JPG, PNG — cámara o galería</div>
+      <div class="upload-text">Tocá para seleccionar remitos (hasta 5)</div>
+      <div class="upload-sub">Podés elegir varias fotos a la vez</div>
       <img class="preview-img" id="previewImg" alt="preview">
     </div>
     <button class="btn-primary" id="btnEscanear">
@@ -702,6 +703,7 @@
   <div class="top-row">
     <div class="section-title" style="margin:0;flex:1">Todos los Registros</div>
     <button class="btn-export" onclick="exportCSV()">⬇ CSV</button>
+    <label class="btn-export" style="cursor:pointer;">📊 Excel<input type="file" id="inputExcel" accept=".xlsx,.xls,.csv" style="display:none" onchange="importExcel(this)"></label>
     <button class="btn-danger" onclick="clearAll()">🗑 Borrar todo</button>
   </div>
 
@@ -742,6 +744,7 @@
           <th>Origen</th>
           <th>Destino</th>
           <th>Chofer</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="recordsTbody"></tbody>
@@ -795,11 +798,22 @@ const previewImg = document.getElementById('previewImg');
 const uploadZone = document.getElementById('uploadZone');
 
 inputImagen.addEventListener('change', () => {
-  const file = inputImagen.files[0];
-  if (!file) return;
-  const url = URL.createObjectURL(file);
+  const files = inputImagen.files;
+  if (!files.length) return;
+  if (files.length > 5) {
+    showToast('⚠ Máximo 5 fotos a la vez');
+    inputImagen.value = '';
+    return;
+  }
+  // Show preview of first image + count
+  const url = URL.createObjectURL(files[0]);
   previewImg.src = url;
   previewImg.style.display = 'block';
+  if (files.length > 1) {
+    document.querySelector('.upload-text').textContent = files.length + ' fotos seleccionadas';
+  } else {
+    document.querySelector('.upload-text').textContent = '1 foto seleccionada';
+  }
 });
 
 // ── SCAN ──
@@ -820,59 +834,78 @@ const FIELD_LABELS = {
   nombre_chofer:   'Nombre del Chofer'
 };
 
+async function procesarImagen(archivo) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(archivo);
+    reader.onload = async () => {
+      const base64Data = reader.result.split(',')[1];
+      const prompt = "Analiza este remito y devuelve estrictamente un JSON con las variables: numero_remito, fecha, litros, bodega_origen, bodega_destino y nombre_chofer (busca a la izquierda abajo aunque no tenga etiqueta). No devuelvas formato markdown, ni comillas invertidas, solo el texto del JSON puro.";
+      const bodyData = { contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: base64Data } }] }] };
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyData)
+        });
+        const data = await res.json();
+        if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          let raw = data.candidates[0].content.parts[0].text.trim().replace(/```json|```/g, '').trim();
+          resolve(JSON.parse(raw));
+        } else { reject('No se pudo leer'); }
+      } catch(e) { reject(e.message); }
+    };
+  });
+}
+
 btnEscanear.addEventListener('click', async () => {
-  if (!inputImagen.files[0]) { showToast('⚠ Primero seleccioná una imagen'); return; }
+  const files = inputImagen.files;
+  if (!files.length) { showToast('⚠ Primero seleccioná una imagen'); return; }
   if (!API_KEY) { showToast('⚠ Guardá tu API Key primero'); return; }
 
   btnEscanear.disabled = true;
   spinnerEl.style.display = 'block';
-  btnText.textContent = 'Analizando...';
   resultCard.style.display = 'none';
   currentJson = null;
 
-  const archivo = inputImagen.files[0];
-  const reader = new FileReader();
-  reader.readAsDataURL(archivo);
+  const total = Math.min(files.length, 5);
+  let guardados = 0;
+  let errores = 0;
 
-  reader.onload = async () => {
-    const base64Data = reader.result.split(',')[1];
-    const prompt = "Analiza este remito y devuelve estrictamente un JSON con las variables: numero_remito, fecha, litros, bodega_origen, bodega_destino y nombre_chofer (busca a la izquierda abajo aunque no tenga etiqueta). No devuelvas formato markdown, ni comillas invertidas, solo el texto del JSON puro.";
-
-    const bodyData = {
-      contents: [{ parts: [
-        { text: prompt },
-        { inlineData: { mimeType: "image/jpeg", data: base64Data } }
-      ]}]
-    };
-
+  for (let i = 0; i < total; i++) {
+    btnText.textContent = `Analizando ${i+1} de ${total}...`;
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyData)
-      });
-      const data = await res.json();
-
-      if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-        let raw = data.candidates[0].content.parts[0].text.trim();
-        // strip possible markdown fences
-        raw = raw.replace(/```json|```/g, '').trim();
-        currentJson = JSON.parse(raw);
-        renderResultTable(currentJson);
+      const json = await procesarImagen(files[i]);
+      const entry = { ...json, _id: Date.now() + i, _ts: new Date().toISOString() };
+      entry.litros = parseFloat(String(entry.litros).replace(/[^\d.]/g, '')) || 0;
+      registros.unshift(entry);
+      guardados++;
+      // Show last result in table
+      if (i === total - 1) {
+        currentJson = json;
+        renderResultTable(json);
         resultCard.style.display = 'block';
-        btnGuardar.style.display = 'block';
-      } else {
-        showToast('❌ No se pudo leer el remito');
-        console.error(data);
+        btnGuardar.style.display = 'none'; // already saved
       }
-    } catch(e) {
-      showToast('❌ Error: ' + e.message);
-    } finally {
-      btnEscanear.disabled = false;
-      spinnerEl.style.display = 'none';
-      btnText.textContent = '✦ Extraer Datos';
+    } catch(e) { errores++; }
+  }
+
+  saveData();
+  updateHeader();
+  if (total === 1 && guardados === 0) {
+    showToast('❌ No se pudo leer el remito');
+  } else if (total > 1) {
+    showToast(`✓ ${guardados} remitos guardados${errores ? ', ' + errores + ' errores' : ''}`);
+  } else {
+    // single file: show result and let user confirm
+    if (guardados === 1) {
+      // already saved above, show confirmation
+      showToast('✓ Guardado correctamente');
     }
-  };
+  }
+
+  btnEscanear.disabled = false;
+  spinnerEl.style.display = 'none';
+  btnText.textContent = '✦ Extraer Datos';
+  document.querySelector('.upload-text').textContent = 'Tocá para seleccionar remitos (hasta 5)';
 });
 
 function renderResultTable(obj) {
@@ -1070,6 +1103,7 @@ function renderRecords() {
       <td>${r.bodega_origen || '—'}</td>
       <td>${r.bodega_destino || '—'}</td>
       <td>${r.nombre_chofer || '—'}</td>
+      <td><button onclick="deleteRegistro(${r._id})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:4px 6px;" title="Borrar">🗑</button></td>
     </tr>`).join('');
 }
 
@@ -1123,6 +1157,90 @@ function exportCSV() {
   showToast('✓ CSV descargado');
 }
 
+// ── DELETE ONE ──
+function deleteRegistro(id) {
+  registros = registros.filter(r => r._id !== id);
+  saveData();
+  updateHeader();
+  buildFilters();
+  renderRecords();
+  showToast('Registro eliminado');
+}
+
+// ── IMPORT EXCEL ──
+function importExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      if (!rows.length) { showToast('El archivo está vacío'); return; }
+
+      // Map columns flexibly
+      const colMap = {
+        numero_remito: ['REMITO','remito','numero_remito','N_REMITO','Remito'],
+        fecha:         ['FECHA','fecha','Fecha','DATE'],
+        litros:        ['LITROS','litros','Litros','CANTIDAD'],
+        bodega_origen: ['DESDE','desde','bodega_origen','ORIGEN','origen'],
+        bodega_destino:['HASTA','hasta','bodega_destino','DESTINO','destino'],
+        nombre_chofer: ['NOMBRE','nombre','nombre_chofer','CHOFER','chofer']
+      };
+
+      function getVal(row, keys) {
+        for (const k of keys) { if (row[k] !== undefined && row[k] !== '') return row[k]; }
+        return '';
+      }
+
+      function excelDateToStr(val) {
+        if (!val) return '';
+        const str = String(val);
+        // Already a date string
+        if (str.includes('/') || str.includes('-')) return str;
+        // Excel serial number
+        const num = parseInt(val);
+        if (num > 1000 && num < 100000) {
+          const d = new Date(Math.round((num - 25569) * 86400 * 1000));
+          const day = String(d.getUTCDate()).padStart(2,'0');
+          const mon = String(d.getUTCMonth()+1).padStart(2,'0');
+          const yr  = d.getUTCFullYear();
+          return `${day}/${mon}/${yr}`;
+        }
+        return str;
+      }
+
+      let importados = 0;
+      rows.forEach((row, i) => {
+        const entry = {
+          numero_remito: String(getVal(row, colMap.numero_remito)),
+          fecha:         excelDateToStr(getVal(row, colMap.fecha)),
+          litros:        parseFloat(String(getVal(row, colMap.litros)).replace(/[^\d.]/g,'')) || 0,
+          bodega_origen: String(getVal(row, colMap.bodega_origen)),
+          bodega_destino:String(getVal(row, colMap.bodega_destino)),
+          nombre_chofer: String(getVal(row, colMap.nombre_chofer)),
+          _id: Date.now() + i,
+          _ts: new Date().toISOString()
+        };
+        registros.unshift(entry);
+        importados++;
+      });
+
+      saveData();
+      updateHeader();
+      buildFilters();
+      renderRecords();
+      showToast(`✓ ${importados} registros importados`);
+    } catch(err) {
+      showToast('❌ Error al leer el archivo');
+      console.error(err);
+    }
+    input.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 // ── CLEAR ALL ──
 function clearAll() {
   if (!confirm('¿Borrar todos los registros? No se puede deshacer.')) return;
@@ -1158,4 +1276,3 @@ if (registros.length === 0) {
 </script>
 </body>
 </html>
- 
