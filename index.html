@@ -1038,15 +1038,16 @@ function renderDashboard() {
   renderBarChart('chartChofer', choferMap, 6, '#5af0c8');
 
   // Promedio por dia activo
-  const diasActivos = new Set(registros.map(r => r._ts ? r._ts.slice(0,10) : null).filter(Boolean)).size;
+  const diasActivos = new Set(registros.map(r => fechaToISO(r.fecha)).filter(Boolean)).size;
   const promedio = diasActivos > 0 ? Math.round(total / diasActivos) : 0;
   document.getElementById('kpiPromedio').textContent = promedio > 0 ? promedio.toLocaleString('es-AR') : '—';
 
   // Chart: litros por mes
   const mesMap = {};
   registros.forEach(r => {
-    if (!r._ts) return;
-    const mes = r._ts.slice(0,7);
+    const iso = fechaToISO(r.fecha);
+    if (!iso) return;
+    const mes = iso.slice(0,7);
     mesMap[mes] = (mesMap[mes] || 0) + (r.litros || 0);
   });
   const mesMapLabels = {};
@@ -1079,14 +1080,21 @@ function renderBarChart(elId, dataMap, maxBars, color) {
   }).join('');
 }
 
+function fechaToISO(str) {
+  if (!str) return null;
+  const p = String(str).split('/');
+  if (p.length === 3) return p[2] + '-' + p[1].padStart(2,'0') + '-' + p[0].padStart(2,'0');
+  return null;
+}
+
 function renderHeatmap() {
   const el = document.getElementById('heatmap');
   const days = 30;
   const today = new Date();
   const dataByDay = {};
   registros.forEach(r => {
-    if (!r._ts) return;
-    const d = r._ts.slice(0, 10);
+    const d = fechaToISO(r.fecha);
+    if (!d) return;
     if (!dataByDay[d]) dataByDay[d] = { count: 0, litros: 0, bodegas: new Set(), choferes: new Set() };
     dataByDay[d].count++;
     dataByDay[d].litros += (r.litros || 0);
@@ -1115,7 +1123,7 @@ function showDayDetail(key) {
 
   const data = { count: 0, litros: 0, bodegas: new Set(), choferes: new Set() };
   registros.forEach(r => {
-    if (!r._ts || !r._ts.startsWith(key)) return;
+    if (fechaToISO(r.fecha) !== key) return;
     data.count++;
     data.litros += (r.litros || 0);
     if (r.bodega_origen) data.bodegas.add(r.bodega_origen);
