@@ -914,59 +914,71 @@ async function procesarImagen(archivo) {
   });
 }
 
+// Queue for multi-photo scanning
+let scanQueue = [];
+let scanIndex = 0;
+let scanTotal = 0;
+
 btnEscanear.addEventListener('click', async () => {
   if (!activeInput || !activeInput.files.length) { showToast('⚠ Primero seleccioná una imagen'); return; }
-  const files = activeInput.files;
   if (!API_KEY) { showToast('⚠ Guardá tu API Key primero'); return; }
+
+  // Build queue from selected files
+  scanQueue = Array.from(activeInput.files).slice(0, 5);
+  scanTotal = scanQueue.length;
+  scanIndex = 0;
+
+  await procesarSiguiente();
+});
+
+async function procesarSiguiente() {
+  if (scanIndex >= scanTotal) {
+    // All done
+    btnEscanear.disabled = false;
+    spinnerEl.style.display = 'none';
+    btnText.textContent = '✦ Extraer Datos';
+    document.getElementById('galeriaCount').textContent = 'Hasta 5 fotos';
+    activeInput = null;
+    scanQueue = [];
+    return;
+  }
 
   btnEscanear.disabled = true;
   spinnerEl.style.display = 'block';
   resultCard.style.display = 'none';
   currentJson = null;
 
-  const total = Math.min(files.length, 5);
-  let guardados = 0;
-  let errores = 0;
+  const label = scanTotal > 1 ? `Analizando ${scanIndex + 1} de ${scanTotal}...` : 'Analizando...';
+  btnText.textContent = label;
 
-  for (let i = 0; i < total; i++) {
-    btnText.textContent = `Analizando ${i+1} de ${total}...`;
-    try {
-      const json = await procesarImagen(files[i]);
-      const entry = { ...json, _id: Date.now() + i, _ts: new Date().toISOString() };
-      entry.litros = parseFloat(String(entry.litros).replace(/[^\d.]/g, '')) || 0;
-      entry.fecha = normalizeDate(entry.fecha);
-      registros.unshift(entry);
-      guardados++;
-      // Show last result in table
-      if (i === total - 1) {
-        currentJson = json;
-        renderResultTable(json);
-        resultCard.style.display = 'block';
-        btnGuardar.style.display = 'none'; // already saved
-      }
-    } catch(e) { errores++; }
-  }
+  try {
+    const json = await procesarImagen(scanQueue[scanIndex]);
+    currentJson = json;
+    renderResultTable(json);
+    resultCard.style.display = 'block';
+    btnGuardar.style.display = 'block';
 
-  saveData();
-  updateHeader();
-  if (total === 1 && guardados === 0) {
-    showToast('❌ No se pudo leer el remito');
-  } else if (total > 1) {
-    showToast(`✓ ${guardados} remitos guardados${errores ? ', ' + errores + ' errores' : ''}`);
-  } else {
-    // single file: show result and let user confirm
-    if (guardados === 1) {
-      // already saved above, show confirmation
-      showToast('✓ Guardado correctamente');
+    // Update save button label
+    const remaining = scanTotal - scanIndex - 1;
+    btnGuardar.textContent = remaining > 0
+      ? `＋ Guardar y continuar (quedan ${remaining})`
+      : '＋ Guardar en Registros';
+
+  } catch(e) {
+    showToast('❌ No se pudo leer el remito ' + (scanIndex + 1));
+    scanIndex++;
+    btnEscanear.disabled = false;
+    spinnerEl.style.display = 'none';
+    btnText.textContent = '✦ Extraer Datos';
+    // Ask if continue
+    if (scanIndex < scanTotal) {
+      setTimeout(() => procesarSiguiente(), 800);
     }
   }
 
   btnEscanear.disabled = false;
   spinnerEl.style.display = 'none';
-  btnText.textContent = '✦ Extraer Datos';
-  document.getElementById('galeriaCount').textContent = 'Hasta 5 fotos';
-  activeInput = null;
-});
+}
 
 function renderResultTable(obj) {
   resultTable.innerHTML = '';
@@ -993,9 +1005,9 @@ function updateCurrentJson(key, value) {
 }
 
 // ── SAVE ──
-btnGuardar.addEventListener('click', () => {
+btnGuardar.addEventListener('click', async () => {
   if (!currentJson) return;
-  // Read values from editable inputs in case user changed them
+  // Read values from editable inputs
   resultTable.querySelectorAll('input[data-key]').forEach(input => {
     currentJson[input.dataset.key] = input.value;
   });
@@ -1005,9 +1017,21 @@ btnGuardar.addEventListener('click', () => {
   registros.unshift(entry);
   saveData();
   updateHeader();
-  showToast('✓ Guardado correctamente');
   btnGuardar.style.display = 'none';
   currentJson = null;
+  resultCard.style.display = 'none';
+
+  scanIndex++;
+  if (scanIndex < scanTotal) {
+    showToast(`✓ Guardado. Procesando ${scanIndex + 1} de ${scanTotal}...`);
+    await procesarSiguiente();
+  } else {
+    showToast('✓ Todos los remitos guardados');
+    btnText.textContent = '✦ Extraer Datos';
+    document.getElementById('galeriaCount').textContent = 'Hasta 5 fotos';
+    scanQueue = [];
+    activeInput = null;
+  }
 });
 
 // ── DASHBOARD ──
