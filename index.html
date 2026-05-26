@@ -686,6 +686,11 @@
       <div class="kpi-value" id="kpiChoferes">0</div>
       <div class="kpi-sub">activos</div>
     </div>
+    <div class="kpi-card" style="grid-column:span 2;">
+      <div class="kpi-label">Promedio por día activo</div>
+      <div class="kpi-value" id="kpiPromedio">—</div>
+      <div class="kpi-sub">litros/día</div>
+    </div>
   </div>
 
   <div class="chart-card">
@@ -698,6 +703,17 @@
   <div class="chart-card">
     <div class="chart-title">Actividad por día (último mes)</div>
     <div class="heatmap-row" id="heatmap"></div>
+    <div id="dayDetail" style="display:none;margin-top:14px;padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);">
+      <div style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px;" id="dayDetailTitle"></div>
+      <div id="dayDetailContent" style="font-size:12px;color:var(--text);line-height:1.8;"></div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">Litros por mes</div>
+    <div class="bar-chart" id="chartMes">
+      <div style="color:var(--text-muted);font-size:12px;margin:auto;">Sin datos aún</div>
+    </div>
   </div>
 
   <div class="chart-card">
@@ -1021,6 +1037,26 @@ function renderDashboard() {
   });
   renderBarChart('chartChofer', choferMap, 6, '#5af0c8');
 
+  // Promedio por dia activo
+  const diasActivos = new Set(registros.map(r => r._ts ? r._ts.slice(0,10) : null).filter(Boolean)).size;
+  const promedio = diasActivos > 0 ? Math.round(total / diasActivos) : 0;
+  document.getElementById('kpiPromedio').textContent = promedio > 0 ? promedio.toLocaleString('es-AR') : '—';
+
+  // Chart: litros por mes
+  const mesMap = {};
+  registros.forEach(r => {
+    if (!r._ts) return;
+    const mes = r._ts.slice(0,7);
+    mesMap[mes] = (mesMap[mes] || 0) + (r.litros || 0);
+  });
+  const mesMapLabels = {};
+  Object.entries(mesMap).sort().forEach(([k,v]) => {
+    const [yr, mo] = k.split('-');
+    const label = new Date(yr, mo-1).toLocaleDateString('es-AR', {month:'short', year:'2-digit'});
+    mesMapLabels[label] = v;
+  });
+  renderBarChart('chartMes', mesMapLabels, 12, '#5a9af0');
+
   // Heatmap last 30 days
   renderHeatmap();
 }
@@ -1047,23 +1083,57 @@ function renderHeatmap() {
   const el = document.getElementById('heatmap');
   const days = 30;
   const today = new Date();
-  const countByDay = {};
+  const dataByDay = {};
   registros.forEach(r => {
     if (!r._ts) return;
     const d = r._ts.slice(0, 10);
-    countByDay[d] = (countByDay[d] || 0) + 1;
+    if (!dataByDay[d]) dataByDay[d] = { count: 0, litros: 0, bodegas: new Set(), choferes: new Set() };
+    dataByDay[d].count++;
+    dataByDay[d].litros += (r.litros || 0);
+    if (r.bodega_origen) dataByDay[d].bodegas.add(r.bodega_origen);
+    if (r.nombre_chofer) dataByDay[d].choferes.add(r.nombre_chofer);
   });
   let html = '';
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const key = d.toISOString().slice(0, 10);
-    const cnt = countByDay[key] || 0;
+    const data = dataByDay[key];
+    const cnt = data ? data.count : 0;
     const cls = cnt === 0 ? '' : cnt === 1 ? 'active-1' : cnt <= 3 ? 'active-2' : 'active-3';
     const day = d.getDate();
-    html += `<div class="heatmap-day ${cls}" title="${key}: ${cnt} remitos">${day}</div>`;
+    const cursor = cnt > 0 ? 'cursor:pointer;' : '';
+    html += `<div class="heatmap-day ${cls}" style="${cursor}" onclick="showDayDetail('${key}')" title="${key}: ${cnt} remitos">${day}</div>`;
   }
   el.innerHTML = html;
+}
+
+function showDayDetail(key) {
+  const detail = document.getElementById('dayDetail');
+  const title = document.getElementById('dayDetailTitle');
+  const contentEl = document.getElementById('dayDetailContent');
+
+  const data = { count: 0, litros: 0, bodegas: new Set(), choferes: new Set() };
+  registros.forEach(r => {
+    if (!r._ts || !r._ts.startsWith(key)) return;
+    data.count++;
+    data.litros += (r.litros || 0);
+    if (r.bodega_origen) data.bodegas.add(r.bodega_origen);
+    if (r.nombre_chofer) data.choferes.add(r.nombre_chofer);
+  });
+
+  if (data.count === 0) { detail.style.display = 'none'; return; }
+
+  const [yr, mo, dy] = key.split('-');
+  const fecha = new Date(yr, mo-1, dy).toLocaleDateString('es-AR', { weekday:'long', day:'numeric', month:'long' });
+  title.textContent = fecha.charAt(0).toUpperCase() + fecha.slice(1);
+  contentEl.innerHTML = `
+    <div>🚛 <strong>${data.count}</strong> viaje${data.count>1?'s':''}</div>
+    <div>💧 <strong>${data.litros.toLocaleString('es-AR')}</strong> litros</div>
+    <div>🏭 ${[...data.bodegas].join(', ') || '—'}</div>
+    <div>👤 ${[...data.choferes].join(', ') || '—'}</div>
+  `;
+  detail.style.display = 'block';
 }
 
 // ── RECORDS ──
@@ -1254,6 +1324,56 @@ function exportPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape' });
 
+  // Get current filtered records same way renderRecords does
+  const mes     = document.getElementById('filterMes').value;
+  const chofer  = document.getElementById('filterChofer').value;
+  const origen  = document.getElementById('filterOrigen').value;
+  const destino = document.getElementById('filterDestino').value;
+  const desde   = document.getElementById('filterDesde').value;
+  const hasta   = document.getElementById('filterHasta').value;
+
+  function parsefecha(str) {
+    if (!str) return null;
+    const p = String(str).split('/');
+    if (p.length === 3) return new Date(p[2], p[1]-1, p[0]);
+    return new Date(str);
+  }
+  const desdeDate = desde ? new Date(desde) : null;
+  const hastaDate = hasta ? new Date(hasta + 'T23:59:59') : null;
+
+  let filtered = registros.filter(r => {
+    if (mes     && !r._ts?.startsWith(mes))     return false;
+    if (chofer  && r.nombre_chofer !== chofer)   return false;
+    if (origen  && r.bodega_origen !== origen)   return false;
+    if (destino && r.bodega_destino !== destino) return false;
+    if (desdeDate || hastaDate) {
+      const fd = parsefecha(r.fecha);
+      if (!fd) return false;
+      if (desdeDate && fd < desdeDate) return false;
+      if (hastaDate && fd > hastaDate) return false;
+    }
+    return true;
+  });
+
+  // Sort most recent first
+  filtered.sort((a, b) => {
+    const da = parsefecha(a.fecha), db = parsefecha(b.fecha);
+    if (!da || !db) return 0;
+    return db - da;
+  });
+
+  if (!filtered.length) { showToast('No hay registros con los filtros actuales'); return; }
+
+  // Build filter description
+  const filterDesc = [
+    mes ? 'Mes: ' + mes : '',
+    chofer ? 'Chofer: ' + chofer : '',
+    origen ? 'Origen: ' + origen : '',
+    destino ? 'Destino: ' + destino : '',
+    desde ? 'Desde: ' + desde : '',
+    hasta ? 'Hasta: ' + hasta : ''
+  ].filter(Boolean).join(' | ');
+
   // Title
   doc.setFontSize(16);
   doc.setFont('helvetica','bold');
@@ -1261,13 +1381,15 @@ function exportPDF() {
   doc.setFontSize(9);
   doc.setFont('helvetica','normal');
   doc.text('Exportado: ' + new Date().toLocaleDateString('es-AR'), 14, 22);
-  doc.text('Total registros: ' + registros.length, 14, 27);
-  const totalLitros = registros.reduce((s,r) => s+(r.litros||0), 0);
-  doc.text('Total litros: ' + totalLitros.toLocaleString('es-AR'), 14, 32);
+  if (filterDesc) doc.text('Filtros: ' + filterDesc, 14, 27);
+  const yStats = filterDesc ? 32 : 27;
+  doc.text('Registros: ' + filtered.length, 14, yStats);
+  const totalLitros = filtered.reduce((s,r) => s+(r.litros||0), 0);
+  doc.text('Total litros: ' + totalLitros.toLocaleString('es-AR'), 60, yStats);
 
   // Table
   const headers = ['Remito','Fecha','Litros','Origen','Destino','Chofer'];
-  const rows = registros.map(r => [
+  const rows = filtered.map(r => [
     r.numero_remito || '',
     normalizeDate(String(r.fecha || '')),
     (r.litros || 0).toLocaleString('es-AR'),
@@ -1279,15 +1401,15 @@ function exportPDF() {
   doc.autoTable({
     head: [headers],
     body: rows,
-    startY: 36,
+    startY: yStats + 5,
     styles: { fontSize: 8, cellPadding: 2 },
     headStyles: { fillColor: [30, 32, 48], textColor: [232, 255, 90], fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [245, 245, 250] },
     margin: { left: 14, right: 14 }
   });
 
-  // Embed data as invisible text for reimport
-  const jsonData = JSON.stringify(registros.map(r => ({
+  // Embed filtered data for reimport
+  const jsonData = JSON.stringify(filtered.map(r => ({
     numero_remito: r.numero_remito,
     fecha: normalizeDate(String(r.fecha||'')),
     litros: r.litros,
