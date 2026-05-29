@@ -1440,7 +1440,7 @@ function exportPDF() {
     margin: { left: 14, right: 14 }
   });
 
-  // Embed filtered data for reimport
+  // Embed filtered data in PDF properties (Subject field) as Base64
   const jsonData = JSON.stringify(filtered.map(r => ({
     numero_remito: r.numero_remito,
     fecha: normalizeDate(String(r.fecha||'')),
@@ -1449,9 +1449,19 @@ function exportPDF() {
     bodega_destino: r.bodega_destino,
     nombre_chofer: r.nombre_chofer
   })));
+  const b64 = btoa(unescape(encodeURIComponent(jsonData)));
+  doc.setProperties({ subject: 'REMITOS_DATA:' + b64 });
+
+  // Also write chunked invisible text as fallback across all pages
+  const chunkSize = 200;
   doc.setFontSize(1);
   doc.setTextColor(255,255,255);
-  doc.text('##REMITOS_DATA##' + jsonData + '##END##', 14, doc.internal.pageSize.height - 2);
+  for (let ci = 0; ci < b64.length; ci += chunkSize) {
+    const chunk = b64.slice(ci, ci + chunkSize);
+    const pageCount = doc.internal.getNumberOfPages();
+    doc.setPage(pageCount);
+    doc.text('##RD' + ci + '##' + chunk, 14, doc.internal.pageSize.height - 2);
+  }
 
   doc.save(`remitos_${new Date().toISOString().slice(0,10)}.pdf`);
   showToast('✓ PDF descargado');
@@ -1464,11 +1474,41 @@ function importPDF(input) {
   const reader = new FileReader();
   reader.onload = async (e) => {
     try {
-      // Read PDF as text using basic extraction
-      const text = await extractPDFText(e.target.result);
-      const match = text.match(/##REMITOS_DATA##([\s\S]*?)##END##/);
-      if (!match) { showToast('❌ PDF no compatible — usá uno exportado desde RemitOS'); input.value=''; return; }
-      const data = JSON.parse(match[1]);
+      const text = extractPDFText(e.target.result);
+
+      // Method 1: PDF properties Subject field (most reliable)
+      let jsonData = null;
+      const propMatch = text.match(/\/Subject\s*\(REMITOS_DATA:([A-Za-z0-9+/=]+)\)/);
+      if (propMatch) {
+        jsonData = decodeURIComponent(escape(atob(propMatch[1])));
+      }
+
+      // Method 2: chunked invisible text fallback
+      if (!jsonData) {
+        const chunks = {};
+        let maxIdx = -1;
+        const chunkRe = /##RD(\d+)##([A-Za-z0-9+/=]{1,200})/g;
+        let m;
+        while ((m = chunkRe.exec(text)) !== null) {
+          const idx = parseInt(m[1]);
+          chunks[idx] = m[2];
+          if (idx > maxIdx) maxIdx = idx;
+        }
+        if (maxIdx >= 0) {
+          let b64 = '';
+          const keys = Object.keys(chunks).map(Number).sort((a,b) => a-b);
+          keys.forEach(k => b64 += chunks[k]);
+          try { jsonData = decodeURIComponent(escape(atob(b64))); } catch(e2) {}
+        }
+      }
+
+      if (!jsonData) {
+        showToast('❌ PDF no compatible — usá uno exportado desde RemitOS');
+        input.value = '';
+        return;
+      }
+
+      const data = JSON.parse(jsonData);
       let importados = 0;
       data.forEach((r, i) => {
         registros.unshift({
@@ -1490,8 +1530,7 @@ function importPDF(input) {
   reader.readAsArrayBuffer(file);
 }
 
-async function extractPDFText(arrayBuffer) {
-  // Simple PDF text extraction — look for our data marker
+function extractPDFText(arrayBuffer) {
   const bytes = new Uint8Array(arrayBuffer);
   let text = '';
   for (let i = 0; i < bytes.length; i++) {
