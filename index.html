@@ -630,6 +630,11 @@
       <input class="api-input" id="apiKeyInput" type="password" placeholder="Pega tu API Key aquí...">
       <button class="api-save-btn" onclick="saveApiKey()">Guardar</button>
     </div>
+    <select id="modeloSelect" onchange="saveModelo()" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:12px;font-family:'DM Sans',sans-serif;margin-top:8px;outline:none;">
+      <option value="gemini-2.5-flash">gemini-2.5-flash (mayor precisión)</option>
+      <option value="gemini-1.5-flash">gemini-1.5-flash (más cuota diaria)</option>
+      <option value="gemini-1.5-flash-8b">gemini-1.5-flash-8b (más rápido, menor cuota)</option>
+    </select>
   </div>
 
   <div class="scanner-card">
@@ -811,14 +816,46 @@ function normalizeDate(str) {
 
 // ── GEMINI API KEY ──
 const API_KEY_STORAGE = 'remitos_api_key';
+const MODELO_STORAGE = 'remitos_modelo';
 let API_KEY = localStorage.getItem(API_KEY_STORAGE) || '';
+let MODELO = localStorage.getItem(MODELO_STORAGE) || 'gemini-2.5-flash';
 const apiKeyInput = document.getElementById('apiKeyInput');
+const modeloSelect = document.getElementById('modeloSelect');
 if (API_KEY) apiKeyInput.value = API_KEY;
+modeloSelect.value = MODELO;
 
 function saveApiKey() {
   API_KEY = apiKeyInput.value.trim();
   localStorage.setItem(API_KEY_STORAGE, API_KEY);
   showToast('✓ API Key guardada');
+}
+
+function saveModelo() {
+  MODELO = modeloSelect.value;
+  localStorage.setItem(MODELO_STORAGE, MODELO);
+  showToast('Modelo: ' + MODELO);
+}
+
+// ── IMAGE COMPRESSION ──
+async function comprimirImagen(archivo) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(archivo);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_W = 1500;
+        let w = img.width, h = img.height;
+        if (w > MAX_W) { h = Math.round(h * MAX_W / w); w = MAX_W; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const b64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+        resolve(b64);
+      };
+      img.src = e.target.result;
+    };
+  });
 }
 
 // ── DATA STORE ──
@@ -893,25 +930,38 @@ const FIELD_LABELS = {
 };
 
 async function procesarImagen(archivo) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(archivo);
-    reader.onload = async () => {
-      const base64Data = reader.result.split(',')[1];
-      const prompt = "Analiza este remito y devuelve estrictamente un JSON con las variables: numero_remito, fecha, litros, bodega_origen, bodega_destino y nombre_chofer (busca a la izquierda abajo aunque no tenga etiqueta). La fecha SIEMPRE en formato DD/MM/AAAA con barras, por ejemplo 23/05/2026. No devuelvas formato markdown, ni comillas invertidas, solo el texto del JSON puro.";
-      const bodyData = { contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: base64Data } }] }] };
-      try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyData)
-        });
-        const data = await res.json();
-        if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-          let raw = data.candidates[0].content.parts[0].text.trim().replace(/```json|```/g, '').trim();
-          resolve(JSON.parse(raw));
-        } else { reject('No se pudo leer'); }
-      } catch(e) { reject(e.message); }
-    };
+  // Compress image before sending
+  const base64Data = await comprimirImagen(archivo);
+
+  // Concise prompt — explicitly use DESDE/HASTA fields for origin/destination
+  const prompt = 'JSON only, no markdown. Fields: numero_remito, fecha(DD/MM/YYYY), litros(number), bodega_origen(value of field labeled DESDE), bodega_destino(value of field labeled HASTA), nombre_chofer(bottom-left name). Ignore company logos or headers.';
+
+  const bodyData = { contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: 'image/jpeg', data: base64Data } }] }] };
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELO}:generateContent?key=${API_KEY}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyData)
   });
+
+  const data = await res.json();
+
+  // Transparent error handling
+  if (data.error) {
+    const msg = data.error.message || JSON.stringify(data.error);
+    throw new Error('API Error ' + (data.error.code || '') + ': ' + msg);
+  }
+
+  if (!res.ok) {
+    throw new Error('HTTP ' + res.status + ': ' + res.statusText);
+  }
+
+  if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    let raw = data.candidates[0].content.parts[0].text.trim().replace(/```json|```/g, '').trim();
+    return JSON.parse(raw);
+  }
+
+  // Check for safety blocks or other issues
+  const reason = data.candidates?.[0]?.finishReason || 'UNKNOWN';
+  throw new Error('Sin respuesta válida. Motivo: ' + reason);
 }
 
 // Queue for multi-photo scanning
@@ -965,12 +1015,13 @@ async function procesarSiguiente() {
       : '＋ Guardar en Registros';
 
   } catch(e) {
-    showToast('❌ No se pudo leer el remito ' + (scanIndex + 1));
+    const errMsg = e.message || String(e);
+    showToast('❌ ' + errMsg);
+    console.error('Scan error:', errMsg);
     scanIndex++;
     btnEscanear.disabled = false;
     spinnerEl.style.display = 'none';
     btnText.textContent = '✦ Extraer Datos';
-    // Ask if continue
     if (scanIndex < scanTotal) {
       setTimeout(() => procesarSiguiente(), 800);
     }
